@@ -10,17 +10,14 @@
 
 # Build status
 
-### Windows:
+### 3DS:
 
-[![Build Status](https://ci.appveyor.com/api/projects/status/github/pjasicek/OpenClaw?svg=true)](https://ci.appveyor.com/project/pjasicek/captainclaw)
+The game is currently 10% complete; only the menu really works, and if  you try to boot into a level, the game will send you back to The Homebrew Loader.
 
-### Linux (debian), macOS, Windows, Android, Emscripten:
+<img width="1084" height="945" alt="screen1" src="https://github.com/user-attachments/assets/38e6fb83-ad86-4f2f-b385-19dacf869fc4" />
 
-[![Build Status](https://travis-ci.org/pjasicek/OpenClaw.svg?branch=master)](https://travis-ci.org/pjasicek/OpenClaw)
+<img width="1033" height="945" alt="screen2" src="https://github.com/user-attachments/assets/afec1b9d-4ba7-41c2-b27e-fb0a3855918b" />
 
-### Static analysis / Code coverage:
-
-[![Static analysis](https://scan.coverity.com/projects/12422/badge.svg?flat=1)](https://scan.coverity.com/projects/pjasicek-captainclaw)
 
 # Tech
 
