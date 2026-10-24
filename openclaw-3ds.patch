@@ -1,0 +1,226 @@
+diff --git a/Box2D/Box2D/Common/b2Settings.h b/Box2D/Box2D/Common/b2Settings.h
+index 1fab814..87e91d1 100644
+--- a/Box2D/Box2D/Common/b2Settings.h
++++ b/Box2D/Box2D/Common/b2Settings.h
+@@ -30,12 +30,23 @@
+ #define B2_NOT_USED(x) ((void)(x))
+ #define b2Assert(A) assert(A)
+ 
++#ifdef __3DS__
++// arm-none-eabi: int32_t is 'long', so reuse the <stdint.h> types to avoid conflicting typedefs
++#include <stdint.h>
++typedef int8_t int8;
++typedef int16_t int16;
++typedef int32_t int32;
++typedef uint8_t uint8;
++typedef uint16_t uint16;
++typedef uint32_t uint32;
++#else
+ typedef signed char	int8;
+ typedef signed short int16;
+ typedef signed int int32;
+ typedef unsigned char uint8;
+ typedef unsigned short uint16;
+ typedef unsigned int uint32;
++#endif
+ typedef float float32;
+ typedef double float64;
+ 
+diff --git a/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp b/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp
+index 6455125..9d3229a 100644
+--- a/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp
++++ b/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp
+@@ -128,8 +128,8 @@ void LocalAmbientSoundComponent::StopAmbientSound()
+ 
+ void LocalAmbientSoundComponent::UpdateAmbientSound()
+ {
+-#ifdef __EMSCRIPTEN__
+-    // TODO: [EMSCRIPTEN] Try to implement Mix_SetDistance
++#if defined(__EMSCRIPTEN__) || defined(__3DS__)
++    // TODO: [EMSCRIPTEN/3DS] Try to implement Mix_SetDistance
+     return;
+ #endif
+     assert(m_SoundChannel != -1);
+diff --git a/OpenClaw/Engine/Audio/Audio.cpp b/OpenClaw/Engine/Audio/Audio.cpp
+index 97c8d19..dc074a6 100644
+--- a/OpenClaw/Engine/Audio/Audio.cpp
++++ b/OpenClaw/Engine/Audio/Audio.cpp
+@@ -132,6 +132,13 @@ static int SetupPlayMusicThread(void* pData)
+ {
+     _MusicInfo* pMusicInfo = (_MusicInfo*)pData;
+ 
++#if defined(__3DS__) && !defined(OPENCLAW_3DS_MUSIC)
++    // 3DS: MIDI/XMI playback through SDL_mixer is too heavy (needs a software synth + soundfont).
++    // Music is disabled unless the build defines OPENCLAW_3DS_MUSIC. Sound effects are unaffected.
++    SAFE_DELETE(pMusicInfo);
++    return 0;
++#endif
++
+ #ifdef _WIN32
+     RpcTryExcept
+     {
+@@ -300,7 +307,7 @@ bool Audio::PlaySound(Mix_Chunk* sound, const SoundProperties& soundProperties)
+         return false;
+     }
+ 
+-#ifndef __EMSCRIPTEN__
++#if !defined(__EMSCRIPTEN__) && !defined(__3DS__)
+     if (!Mix_SetPosition(channel, soundProperties.angle, soundProperties.distance))
+     {
+         LOG_ERROR("Mix_SetPosition: " + std::string(Mix_GetError()));
+diff --git a/OpenClaw/Engine/GameApp/BaseGameApp.cpp b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
+index 64533c3..541d49b 100644
+--- a/OpenClaw/Engine/GameApp/BaseGameApp.cpp
++++ b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
+@@ -22,6 +22,10 @@
+ 
+ #include "BaseGameApp.h"
+ 
++#ifdef __3DS__
++#include "Platform3DS.h"
++#endif
++
+ #include <cctype>
+ 
+ #ifdef __EMSCRIPTEN__
+@@ -213,6 +217,9 @@ void BaseGameApp::StepLoop() {
+         consecutiveLagSpikes = 0;
+ 
+         // Handle all input events
++#ifdef __3DS__
++        Platform3DS_PumpInput(); // Buttons/circle pad -> synthetic SDL key events
++#endif
+         while (SDL_PollEvent(&event))
+         {
+             OnEvent(event);
+@@ -801,7 +808,12 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
+ 
+     m_WindowSize.Set(gameOptions.windowWidth, gameOptions.windowHeight);
+ 
++#ifdef __3DS__
++    // Let SDL pick whichever renderer the 3DS backend provides (no ACCELERATED requirement)
++    uint32 rendererFlags = 0;
++#else
+     uint32 rendererFlags = SDL_RENDERER_ACCELERATED;
++#endif
+     if (gameOptions.useVerticalSync)
+     {
+         rendererFlags |= SDL_RENDERER_PRESENTVSYNC;
+diff --git a/OpenClaw/Engine/GameApp/MainLoop.cpp b/OpenClaw/Engine/GameApp/MainLoop.cpp
+index f5c616e..0b0e0d2 100644
+--- a/OpenClaw/Engine/GameApp/MainLoop.cpp
++++ b/OpenClaw/Engine/GameApp/MainLoop.cpp
+@@ -2,7 +2,7 @@
+ #include "MainLoop.h"
+ #include <fstream>
+ 
+-#if !(defined(__ANDROID__) || defined(__WINDOWS__))
++#if !(defined(__ANDROID__) || defined(__WINDOWS__) || defined(__3DS__))
+ #include <pwd.h>
+ #include <unistd.h>
+ #endif
+@@ -11,6 +11,10 @@
+ #include <emscripten.h>
+ #endif
+ 
++#ifdef __3DS__
++#include "Platform3DS.h"
++#endif
++
+ int RunGameEngine(int argc, char** argv)
+ {
+     if (SDL_SetThreadPriority(SDL_THREAD_PRIORITY_HIGH) != 0)
+@@ -24,6 +28,9 @@ int RunGameEngine(int argc, char** argv)
+     userDirectory = "/sdcard/claw/";
+ #elif defined(__WINDOWS__)
+     userDirectory = "";
++#elif defined(__3DS__)
++    // Working directory is set to sdmc:/3ds/OpenClaw/ by Platform3DS_Init()
++    userDirectory = "";
+ #else
+     const char* homedir;
+ 
+@@ -37,19 +44,24 @@ int RunGameEngine(int argc, char** argv)
+ 
+ #endif
+ 
+-    LOG("Looking for: " + userDirectory + "config.xml");
++    std::string configName = "config.xml";
++#ifdef __3DS__
++    configName = Platform3DS_ConfigFileName();
++#endif
++
++    LOG("Looking for: " + userDirectory + configName);
+ 
+     // Temporary hack - always prefer config in the same folder as binary to default config
+-    if (TryToFindFile("config.xml"))
++    if (TryToFindFile(configName.c_str()))
+     {
+         // File was found in a working directory
+         userDirectory = "";
+     }
+ 
+-    LOG("Expecting config.xml in path: " + userDirectory + "config.xml");
++    LOG("Expecting " + configName + " in path: " + userDirectory + configName);
+ 
+     // Load options
+-    if (!g_pApp->LoadGameOptions(std::string(userDirectory + "config.xml").c_str()))
++    if (!g_pApp->LoadGameOptions(std::string(userDirectory + configName).c_str()))
+     {
+         LOG_ERROR("Could not load game options. Exiting.");
+         return -1;
+@@ -58,7 +70,7 @@ int RunGameEngine(int argc, char** argv)
+     g_pApp->GetGameConfig()->userDirectory = userDirectory;
+ 
+     std::string savesFilePath = g_pApp->GetGameConfig()->userDirectory + g_pApp->GetGameConfig()->savesFile;
+-    LOG("Loaded with:\n\tConfig File: " + userDirectory + "config.xml" + "\n\tSaves File: " + savesFilePath);
++    LOG("Loaded with:\n\tConfig File: " + userDirectory + configName + "\n\tSaves File: " + savesFilePath);
+ 
+     // Initialize game instance
+     if (!g_pApp->Initialize(argc, argv))
+diff --git a/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp b/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp
+index 285bc0c..e078c7c 100644
+--- a/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp
++++ b/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp
+@@ -2,7 +2,13 @@
+ #include "../SharedDefines.h"
+ #include "../Scene/SceneNodes.h"
+ 
++#ifdef __3DS__
++// SDL2_gfx is not available on 3DS: physics debug drawing is a no-op there
++#define polygonRGBA(...) (0)
++#define circleRGBA(...) (0)
++#else
+ #include <SDL2/SDL2_gfxPrimitives.h>
++#endif
+ 
+ // Conversion warnings from Box2D -> SDL2_gfx
+ #pragma warning(disable: 4244)
+diff --git a/OpenClaw/main.cpp b/OpenClaw/main.cpp
+index c8ebffc..edde0e3 100644
+--- a/OpenClaw/main.cpp
++++ b/OpenClaw/main.cpp
+@@ -8,6 +8,10 @@
+ #include <jni.h>
+ #endif
+ 
++#ifdef __3DS__
++#include "Platform3DS.h"
++#endif
++
+ ClawGameApp testApp;
+ 
+ int main(int argc, char* argv[]);
+@@ -46,5 +50,12 @@ int main(int argc, char* argv[])
+ //    _CrtSetReportFile( _CRT_ASSERT, _CRTDBG_FILE_STDOUT );
+     _CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
+ #endif
++#ifdef __3DS__
++    Platform3DS_Init();
++    int result = RunGameEngine(argc, argv);
++    Platform3DS_Shutdown();
++    return result;
++#else
+     return RunGameEngine(argc, argv);
++#endif
+ }
