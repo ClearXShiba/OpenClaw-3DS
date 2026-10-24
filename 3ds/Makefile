@@ -33,12 +33,13 @@ ICON            := $(DEVKITPRO)/libctru/default_icon.png
 #   - Box2D/Box2D          physics
 # Excluded:
 #   - OpenClaw/Engine/Resource/Miniz.cpp : duplicate of libwap/Miniz.cpp (same code)
+#   - ThirdParty/Tinyxml/xmltest.cpp     : TinyXML's own test program (has a main())
 #   - MidiProc, ClawLauncher             : Windows only
 #---------------------------------------------------------------------------------
 CPP_SRCS := $(filter-out $(ROOT)/OpenClaw/Engine/Resource/Miniz.cpp, \
                 $(shell find $(ROOT)/OpenClaw -name '*.cpp')) \
             $(wildcard $(ROOT)/libwap/*.cpp) \
-            $(wildcard $(ROOT)/ThirdParty/Tinyxml/*.cpp) \
+            $(filter-out $(ROOT)/ThirdParty/Tinyxml/xmltest.cpp,$(wildcard $(ROOT)/ThirdParty/Tinyxml/*.cpp)) \
             $(shell find $(ROOT)/Box2D/Box2D -name '*.cpp') \
             $(ROOT)/3ds/Platform3DS.cpp
 
@@ -65,13 +66,15 @@ INCLUDE  := $(shell $(PKGCONF) --cflags $(SDL_PKGS)) -I$(PORTLIBS)/include -I$(P
             -I$(ROOT)/ThirdParty/Tinyxml
 
 DEFINES  := -D__3DS__ -DSDL_MAIN_HANDLED -DTIXML_USE_STL
+# Make newlib's int32_t/uint32_t plain int/unsigned int (see 3ds/CompatTypes.h)
+DEFINES  += -U__INT32_TYPE__ -D__INT32_TYPE__=int -U__UINT32_TYPE__ '-D__UINT32_TYPE__=unsigned int'
 ifeq ($(MUSIC),1)
 DEFINES  += -DOPENCLAW_3DS_MUSIC
 endif
 
-CFLAGS   := -g -Wall -O2 -mword-relocations -ffunction-sections -fomit-frame-pointer \
+CFLAGS   := -w -g -Wall -O2 -mword-relocations -ffunction-sections -fomit-frame-pointer -fno-strict-aliasing \
             $(ARCH) $(DEFINES) $(INCLUDE)
-CXXFLAGS := $(CFLAGS) -std=gnu++14 -Wno-reorder -Wno-sign-compare -Wno-unused-variable
+CXXFLAGS := $(CFLAGS) -include $(ROOT)/3ds/CompatTypes.h -std=gnu++14 -Wno-reorder -Wno-sign-compare -Wno-unused-variable
 
 LDFLAGS  := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map -L$(CTRULIB)/lib -L$(PORTLIBS)/lib
 

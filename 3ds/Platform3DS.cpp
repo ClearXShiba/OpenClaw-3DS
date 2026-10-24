@@ -5,6 +5,7 @@
 #include <3ds.h>
 #include <SDL2/SDL.h>
 
+#include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fstream>
@@ -29,6 +30,16 @@ void Platform3DS_Init()
     mkdir(kDataDir, 0777);
     mkdir("sdmc:/3ds/OpenClaw/tmp", 0777);
     chdir(kDataDir);
+
+    // Everything the game prints (SDL_Log / LOG / LOG_ERROR go to stderr, printf to stdout)
+    // is written to sdmc:/3ds/OpenClaw/log.txt so failures can be diagnosed without a PC link.
+    // The file is recreated on every launch.
+    if (freopen("sdmc:/3ds/OpenClaw/log.txt", "w", stderr))
+    {
+        setvbuf(stderr, NULL, _IONBF, 0);
+        stdout = stderr; // same file, same ordering, no buffering delay
+        fprintf(stderr, "OpenClaw 3DS log - %s 3DS, cwd=%s\n", s_isNew3DS ? "New" : "Old", kDataDir);
+    }
 }
 
 void Platform3DS_Shutdown()

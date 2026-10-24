@@ -37,6 +37,9 @@ Create `sdmc:/3ds/OpenClaw/` and copy:
 
 Launch from the Homebrew Launcher.
 
+If it returns straight to the launcher or crashes, open `sdmc:/3ds/OpenClaw/log.txt` (rewritten
+on every launch) - it contains the game's own error messages and usually says what is missing.
+
 ## Controls
 | 3DS | Action |
 |---|---|
@@ -50,6 +53,8 @@ Launch from the Homebrew Launcher.
 Touch screen events go through OpenClaw's existing touch recognizers (pause tap, weapon tap, ...).
 
 ## What was changed
+- libwap: the REZ directory tree is now parsed through a 64 KB block cache (`RezBlockBuf`). The original
+  code did ~50k tiny seeks/reads, which takes minutes on the 3DS SD card.
 - Audio: music is OFF by default on 3DS (MIDI through SDL_mixer is too heavy); positional audio
   (`Mix_SetPosition` / `Mix_SetDistance`) is skipped, like the existing Emscripten branches.
 - Input: `Platform3DS_PumpInput()` turns buttons into SDL key events.
