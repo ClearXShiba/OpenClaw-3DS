@@ -25,7 +25,7 @@
         <AssetsFolder>sdmc:/3ds/OpenClaw/</AssetsFolder>
         <RezArchive>CLAW.REZ</RezArchive>
         <CustomArchive>ASSETS.ZIP</CustomArchive>
-        <ResourceCacheSize>16</ResourceCacheSize>
+        <ResourceCacheSize>8</ResourceCacheSize>
 	<TempDir>sdmc:/3ds/OpenClaw/tmp/</TempDir>
         <SavesFile>SAVES.XML</SavesFile>
     </Assets>

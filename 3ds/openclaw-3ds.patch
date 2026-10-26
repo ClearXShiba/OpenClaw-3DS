@@ -1,31 +1,3 @@
-diff --git a/Box2D/Box2D/Common/b2Settings.h b/Box2D/Box2D/Common/b2Settings.h
-index 1fab814..87e91d1 100644
---- a/Box2D/Box2D/Common/b2Settings.h
-+++ b/Box2D/Box2D/Common/b2Settings.h
-@@ -30,12 +30,23 @@
- #define B2_NOT_USED(x) ((void)(x))
- #define b2Assert(A) assert(A)
- 
-+#ifdef __3DS__
-+// arm-none-eabi: int32_t is 'long', so reuse the <stdint.h> types to avoid conflicting typedefs
-+#include <stdint.h>
-+typedef int8_t int8;
-+typedef int16_t int16;
-+typedef int32_t int32;
-+typedef uint8_t uint8;
-+typedef uint16_t uint16;
-+typedef uint32_t uint32;
-+#else
- typedef signed char	int8;
- typedef signed short int16;
- typedef signed int int32;
- typedef unsigned char uint8;
- typedef unsigned short uint16;
- typedef unsigned int uint32;
-+#endif
- typedef float float32;
- typedef double float64;
- 
 diff --git a/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp b/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp
 index 6455125..9d3229a 100644
 --- a/OpenClaw/Engine/Actor/Components/LocalAmbientSoundComponent.cpp
@@ -42,7 +14,7 @@ index 6455125..9d3229a 100644
  #endif
      assert(m_SoundChannel != -1);
 diff --git a/OpenClaw/Engine/Audio/Audio.cpp b/OpenClaw/Engine/Audio/Audio.cpp
-index 97c8d19..dc074a6 100644
+index 97c8d19..1bc1237 100644
 --- a/OpenClaw/Engine/Audio/Audio.cpp
 +++ b/OpenClaw/Engine/Audio/Audio.cpp
 @@ -132,6 +132,13 @@ static int SetupPlayMusicThread(void* pData)
@@ -59,7 +31,20 @@ index 97c8d19..dc074a6 100644
  #ifdef _WIN32
      RpcTryExcept
      {
-@@ -300,7 +307,7 @@ bool Audio::PlaySound(Mix_Chunk* sound, const SoundProperties& soundProperties)
+@@ -296,11 +303,20 @@ bool Audio::PlaySound(Mix_Chunk* sound, const SoundProperties& soundProperties)
+     int channel = Mix_PlayChannel(-1, sound, loops);
+     if (channel == -1)
+     {
++#ifdef __3DS__
++        // All mixing channels busy is normal in busy scenes; every log line is an SD card write
++        static int s_failedPlays = 0;
++        if ((s_failedPlays++ % 100) == 0)
++        {
++            LOG_ERROR("Failed to play chunk (" + std::to_string(s_failedPlays) + " so far): " + std::string(Mix_GetError()));
++        }
++#else
+         LOG_ERROR("Failed to play chunk: " + std::string(Mix_GetError()));
++#endif
          return false;
      }
  
@@ -69,7 +54,7 @@ index 97c8d19..dc074a6 100644
      {
          LOG_ERROR("Mix_SetPosition: " + std::string(Mix_GetError()));
 diff --git a/OpenClaw/Engine/GameApp/BaseGameApp.cpp b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
-index 64533c3..541d49b 100644
+index 64533c3..293b7bf 100644
 --- a/OpenClaw/Engine/GameApp/BaseGameApp.cpp
 +++ b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
 @@ -22,6 +22,10 @@
@@ -83,17 +68,91 @@ index 64533c3..541d49b 100644
  #include <cctype>
  
  #ifdef __EMSCRIPTEN__
-@@ -213,6 +217,9 @@ void BaseGameApp::StepLoop() {
+@@ -64,13 +68,17 @@ bool BaseGameApp::Initialize(int argc, char** argv)
+     if (!InitializeAudio(m_GameOptions)) return false;
+     if (!InitializeFont(m_GameOptions)) return false;
+     if (!InitializeResources(m_GameOptions)) return false;
++    LOG("Initializing localization / touch...");
+     if (!InitializeLocalization(m_GameOptions)) return false;
+     if (!InitializeTouchManager(m_GameOptions)) return false;
++    LOG("Reading actor prototypes...");
+     if (!ReadActorXmlPrototypes(m_GameOptions)) return false;
++    LOG("Reading level metadata...");
+     if (!ReadLevelMetadata(m_GameOptions)) return false;
+ 
+     RegisterAllDelegates();
+ 
++    LOG("Creating game logic and view...");
+     m_pGame = VCreateGameAndView();
+     if (!m_pGame)
+     {
+@@ -78,11 +86,19 @@ bool BaseGameApp::Initialize(int argc, char** argv)
+         return false;
+     }
+ 
++    LOG("Preloading /CLAW/* ...");
+     m_pResourceMgr->VPreload("/CLAW/*", NULL, ORIGINAL_RESOURCE);
++    LOG("Preloading /GAME/* ...");
+     m_pResourceMgr->VPreload("/GAME/*", NULL, ORIGINAL_RESOURCE);
++    LOG("Preloading /STATES/* ...");
+     m_pResourceMgr->VPreload("/STATES/*", NULL, ORIGINAL_RESOURCE);
+ 
++    LOG("Preloading custom assets...");
+     m_pResourceMgr->VPreload("*", NULL, CUSTOM_RESOURCE);
++    LOG("Preloading done");
++#ifdef __3DS__
++    Platform3DS_LogMemory("after startup preload");
++#endif
+ 
+     if (!VPerformStartupTests())
+     {
+@@ -213,6 +229,11 @@ void BaseGameApp::StepLoop() {
          consecutiveLagSpikes = 0;
  
          // Handle all input events
 +#ifdef __3DS__
++        {
++        Prof3DS prof(0);
 +        Platform3DS_PumpInput(); // Buttons/circle pad -> synthetic SDL key events
 +#endif
          while (SDL_PollEvent(&event))
          {
              OnEvent(event);
-@@ -801,7 +808,12 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
+@@ -225,13 +246,23 @@ void BaseGameApp::StepLoop() {
+                 OnEvent(touchEvent.sdlEvent);
+             }
+         }
++#ifdef __3DS__
++        }
++#endif
+ 
+         if (m_pGame)
+         {
+             // Update game
+             {
+                 //PROFILE_CPU("ONLY GAME UPDATE");
++#ifdef __3DS__
++                {
++                Prof3DS prof(1);
++#endif
+                 IEventMgr::Get()->VUpdate(20); // Allow event queue to process for up to 20 ms
++#ifdef __3DS__
++                }
++#endif
+                 m_pGame->VOnUpdate(elapsedTime);
+             }
+ 
+@@ -247,6 +278,9 @@ void BaseGameApp::StepLoop() {
+ 
+         // Artificially decrease fps. Configurable from console
+         Util::Sleep(m_DebugOptions.cpuDelayMs);
++#ifdef __3DS__
++        Platform3DS_ProfileEndFrame();
++#endif
+     }
+ }
+ 
+@@ -801,13 +835,22 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
  
      m_WindowSize.Set(gameOptions.windowWidth, gameOptions.windowHeight);
  
@@ -106,6 +165,195 @@ index 64533c3..541d49b 100644
      if (gameOptions.useVerticalSync)
      {
          rendererFlags |= SDL_RENDERER_PRESENTVSYNC;
+     }
+ 
++#ifdef __3DS__
++    m_pRenderer = Platform3DS_CreateRenderer(m_pWindow); // software renderer on a fast-blit back buffer (3ds/Video3DS.cpp)
++#else
+     m_pRenderer = SDL_CreateRenderer(m_pWindow, -1, rendererFlags);
++#endif
+     if (m_pRenderer == NULL)
+     {
+         LOG_ERROR("Failed to create SDL2 Renderer. Error: %s" + std::string(SDL_GetError()));
+@@ -816,6 +859,10 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
+ 
+     SDL_RenderSetScale(m_pRenderer, (float)gameOptions.scale, (float)gameOptions.scale);
+ 
++#ifdef __3DS__
++    Platform3DS_BlitBenchmark(m_pRenderer, m_pWindow); // one-time timing of SDL's software blits -> log.txt
++#endif
++
+     LOG("Display successfully initialized.");
+ 
+     return true;
+@@ -859,6 +906,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+ 
+     std::string rezArchivePath = gameOptions.assetsFolder + gameOptions.rezArchive;
+ 
++    LOG("Opening original resource archive: " + rezArchivePath);
+     IResourceFile* rezArchive = new ResourceRezArchive(rezArchivePath);
+     std::shared_ptr<ResourceCache> m_pResourceCache { new ResourceCache(gameOptions.resourceCacheSize, rezArchive, ORIGINAL_RESOURCE) };
+     if (!m_pResourceCache->Init())
+@@ -867,6 +915,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+         return false;
+     }
+ 
++    LOG("Original resource archive opened");
+     m_pResourceCache->RegisterLoader(DefaultResourceLoader::Create());
+     m_pResourceCache->RegisterLoader(XmlResourceLoader::Create());
+     m_pResourceCache->RegisterLoader(WwdResourceLoader::Create());
+@@ -879,6 +928,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+ 
+     std::string customArchivePath = gameOptions.assetsFolder + gameOptions.customArchive;
+ 
++    LOG("Opening custom resource archive: " + customArchivePath);
+     IResourceFile* pCustomArchive = new ResourceZipArchive(customArchivePath);
+     std::shared_ptr<ResourceCache> pCustomCache{ new ResourceCache(50, pCustomArchive, CUSTOM_RESOURCE) };
+     if (!pCustomCache->Init())
+diff --git a/OpenClaw/Engine/GameApp/BaseGameLogic.cpp b/OpenClaw/Engine/GameApp/BaseGameLogic.cpp
+index 5d8dc7d..10d3232 100644
+--- a/OpenClaw/Engine/GameApp/BaseGameLogic.cpp
++++ b/OpenClaw/Engine/GameApp/BaseGameLogic.cpp
+@@ -27,6 +27,13 @@
+ 
+ #include "../Physics/ClawPhysics.h"
+ 
++#ifdef __3DS__
++#include "Platform3DS.h"
++#define LOG_MEM(tag) Platform3DS_LogMemory(tag)
++#else
++#define LOG_MEM(tag) ((void)0)
++#endif
++
+ #include <algorithm>
+ #include <fstream>
+ //#include <thread>
+@@ -186,6 +193,9 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+     PROFILE_CPU("GAME LOADING");
+     PROFILE_MEMORY("GAME LOADING");
+ 
++    LOG("VLoadGame: start");
++    LOG_MEM("VLoadGame start");
++
+     // Stop all audio
+     g_pApp->GetAudio()->StopAllSounds();
+ 
+@@ -196,7 +206,10 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+ 
+     // Preload level resources
+     std::string levelPath = "/LEVEL" + ToStr(m_pCurrentLevel->GetLevelNumber()) + "/*";
++    LOG("VLoadGame: preloading level resources " + levelPath);
+     g_pApp->GetResourceCache()->Preload(levelPath, NULL);
++    LOG("VLoadGame: level resources preloaded");
++    LOG_MEM("level resources preloaded");
+ 
+     // ============== LOADING SCREEN RENDERING ==============
+ 
+@@ -216,10 +229,15 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+ 
+     // ============== LEVEL LOADING ==============
+ 
++    LOG("VLoadGame: loading WWD level file");
+     WapWwd* pWwd = WwdResourceLoader::LoadAndReturnWwd(xmlLevelResource);
+     assert(pWwd != NULL);
++    LOG("VLoadGame: WWD loaded, converting to XML");
++    LOG_MEM("WWD loaded");
+ 
+     TiXmlElement* pXmlLevelRoot = WwdToXml(pWwd, m_pCurrentLevel->GetLevelNumber());
++    LOG("VLoadGame: WWD converted to XML");
++    LOG_MEM("WWD converted to XML");
+     if (pXmlLevelRoot == NULL)
+     {
+         LOG_ERROR("Could not load level resource file: " + std::string(xmlLevelResource));
+@@ -303,6 +321,8 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+ 
+     loadingProgress = 10.0f;
+     RenderLoadingScreen(pBackgroundImage, backgroundRect, scale, loadingProgress);
++    LOG("VLoadGame: tile descriptions parsed");
++    LOG_MEM("tile descriptions parsed");
+ 
+     // Get number of actors to estimate loading progress
+     int numActors = 0;
+@@ -317,6 +337,8 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+     std::replace(palettePath.begin(), palettePath.end(), '\\', '/');
+     g_pApp->SetCurrentPalette(PalResourceLoader::LoadAndReturnPal(palettePath.c_str()));
+ 
++    LOG("VLoadGame: creating " + ToStr(numActors) + " actors");
++    int actorsCreated = 0;
+     uint32 clawId = -1;
+     for (TiXmlElement* pActorElem = pXmlLevelRoot->FirstChildElement("Actor"); 
+         pActorElem != NULL;
+@@ -348,7 +370,15 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+             RenderLoadingScreen(pBackgroundImage, backgroundRect, scale, loadingProgress);
+             lastProgress = loadingProgress;
+         }
++
++        if ((++actorsCreated % 250) == 0)
++        {
++            LOG("VLoadGame: actors created " + ToStr(actorsCreated) + " / " + ToStr(numActors));
++            LOG_MEM("actors created");
++        }
+     }
++    LOG("VLoadGame: all actors created");
++    LOG_MEM("all actors created");
+ 
+     // Load game save data
+     const CheckpointSave* pCheckpointSave = m_pGameSaveMgr->GetCheckpointSave(
+@@ -398,6 +428,8 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+         }
+     }
+ 
++    LOG("VLoadGame: loading human views (scene, tiles, textures)");
++    LOG_MEM("before human view load");
+     // Notify all human views
+     for (auto pGameView : m_GameViews)
+     {
+@@ -408,6 +440,7 @@ bool BaseGameLogic::VLoadGame(const char* xmlLevelResource)
+         }
+     }
+ 
++    LOG_MEM("after human view load");
+     loadingProgress = 100.0f;   
+     RenderLoadingScreen(pBackgroundImage, backgroundRect, scale, loadingProgress);
+ 
+@@ -807,6 +840,9 @@ void BaseGameLogic::VOnUpdate(uint32 msDiff)
+                 // TODO: Add config to choose between fixed physics timestep and variable
+                 if (true)
+                 {
++#ifdef __3DS__
++                    Prof3DS prof(2);
++#endif
+                     m_pPhysics->VOnUpdate(msDiff);
+                     m_pPhysics->VSyncVisibleScene();
+                 }
+@@ -840,10 +876,17 @@ void BaseGameLogic::VOnUpdate(uint32 msDiff)
+     }
+ 
+     // Update all game views
++#ifdef __3DS__
++    {
++    Prof3DS prof(3);
++#endif
+     for (auto &pGameView : m_GameViews)
+     {
+         pGameView->VOnUpdate(msDiff);
+     }
++#ifdef __3DS__
++    }
++#endif
+ 
+     // Limit update to max 100 times / second
+     static int msAccumulation = 0;
+@@ -851,6 +894,9 @@ void BaseGameLogic::VOnUpdate(uint32 msDiff)
+     if (msAccumulation >= 5)
+     {
+         // Update all game actors
++#ifdef __3DS__
++        Prof3DS prof(4);
++#endif
+         for (auto &actorIter : m_ActorMap)
+         {
+             actorIter.second->Update(msAccumulation);
 diff --git a/OpenClaw/Engine/GameApp/MainLoop.cpp b/OpenClaw/Engine/GameApp/MainLoop.cpp
 index f5c616e..0b0e0d2 100644
 --- a/OpenClaw/Engine/GameApp/MainLoop.cpp
@@ -178,6 +426,150 @@ index f5c616e..0b0e0d2 100644
  
      // Initialize game instance
      if (!g_pApp->Initialize(argc, argv))
+diff --git a/OpenClaw/Engine/Graphics2D/Image.cpp b/OpenClaw/Engine/Graphics2D/Image.cpp
+index b6a6159..56a542b 100644
+--- a/OpenClaw/Engine/Graphics2D/Image.cpp
++++ b/OpenClaw/Engine/Graphics2D/Image.cpp
+@@ -76,6 +76,71 @@ static void PutPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
+     }
+ }
+ 
++static bool g_DownscaleEnabled = true;
++
++void Image::SetDownscaleEnabled(bool enabled)
++{
++    g_DownscaleEnabled = enabled;
++}
++
++#ifdef __3DS__
++// Half-size copy of a 32-bit RGBA surface (byte order R,G,B,A) using an alpha-weighted 2x2 box filter,
++// so transparent texels do not darken the edges of sprites.
++static SDL_Surface* DownscaleHalf(SDL_Surface* src)
++{
++    int dw = (src->w + 1) / 2;
++    int dh = (src->h + 1) / 2;
++    SDL_Surface* dst = Util::CreateRGBSurface(0, dw, dh, 32);
++    if (dst == NULL)
++    {
++        return NULL;
++    }
++
++    for (int y = 0; y < dh; y++)
++    {
++        const int y0 = y * 2;
++        const int y1 = (y0 + 1 < src->h) ? y0 + 1 : y0;
++        Uint8* out = (Uint8*)dst->pixels + y * dst->pitch;
++        for (int x = 0; x < dw; x++)
++        {
++            const int x0 = x * 2;
++            const int x1 = (x0 + 1 < src->w) ? x0 + 1 : x0;
++            const Uint8* p[4] =
++            {
++                (const Uint8*)src->pixels + y0 * src->pitch + x0 * 4,
++                (const Uint8*)src->pixels + y0 * src->pitch + x1 * 4,
++                (const Uint8*)src->pixels + y1 * src->pitch + x0 * 4,
++                (const Uint8*)src->pixels + y1 * src->pitch + x1 * 4
++            };
++
++            unsigned r = 0, g = 0, b = 0, a = 0;
++            for (int i = 0; i < 4; i++)
++            {
++                unsigned pa = p[i][3];
++                r += p[i][0] * pa;
++                g += p[i][1] * pa;
++                b += p[i][2] * pa;
++                a += pa;
++            }
++
++            if (a == 0)
++            {
++                out[0] = out[1] = out[2] = out[3] = 0;
++            }
++            else
++            {
++                out[0] = (Uint8)((r + a / 2) / a);
++                out[1] = (Uint8)((g + a / 2) / a);
++                out[2] = (Uint8)((b + a / 2) / a);
++                out[3] = (Uint8)((a + 2) / 4);
++            }
++            out += 4;
++        }
++    }
++    return dst;
++}
++#endif
++
+ SDL_Texture* Image::GetTextureFromPid(WapPid* pid, SDL_Renderer* renderer)
+ {
+     assert(pid != NULL);
+@@ -98,9 +163,52 @@ SDL_Texture* Image::GetTextureFromPid(WapPid* pid, SDL_Renderer* renderer)
+         PutPixel(surface, x, y, SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
+     }
+ 
++#ifdef __3DS__
++    if (g_DownscaleEnabled)
++    {
++        float scaleX = 1.0f, scaleY = 1.0f;
++        SDL_RenderGetScale(renderer, &scaleX, &scaleY);
++        if (scaleX == 0.5f && scaleY == 0.5f)
++        {
++            // The renderer shrinks everything to 50% anyway. Doing it once here makes the per-frame
++            // copy an unscaled blit (much faster in SDL's software renderer) and cuts texture memory to 1/4.
++            // The Image keeps reporting the original width/height, so all layout code is unchanged.
++            if (SDL_Surface* half = DownscaleHalf(surface))
++            {
++                SDL_FreeSurface(surface);
++                surface = half;
++            }
++        }
++    }
++#endif
++
++#ifdef __3DS__
++    // Fully opaque images (tiles, backgrounds) do not need alpha blending: a plain copy is ~10x faster
++    bool isOpaque = true;
++    for (int y = 0; y < surface->h && isOpaque; y++)
++    {
++        const Uint8* row = (const Uint8*)surface->pixels + y * surface->pitch;
++        for (int x = 0; x < surface->w; x++)
++        {
++            if (row[x * 4 + 3] != 255)
++            {
++                isOpaque = false;
++                break;
++            }
++        }
++    }
++#endif
++
+     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+     assert(texture != NULL);
+ 
++#ifdef __3DS__
++    if (isOpaque && texture != NULL)
++    {
++        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
++    }
++#endif
++
+     SDL_FreeSurface(surface);
+ 
+     return texture;
+diff --git a/OpenClaw/Engine/Graphics2D/Image.h b/OpenClaw/Engine/Graphics2D/Image.h
+index b789c4c..1a65cb3 100644
+--- a/OpenClaw/Engine/Graphics2D/Image.h
++++ b/OpenClaw/Engine/Graphics2D/Image.h
+@@ -18,6 +18,10 @@ public:
+     static Image* CreatePngImage(char* rawBuffer, uint32_t size, SDL_Renderer* renderer);
+     static Image* CreateImageFromColor(SDL_Color color, int w, int h, SDL_Renderer* pRenderer);
+ 
++    // 3DS: PID sprites/tiles are stored at half size when the renderer scale is 0.5 (see Image.cpp).
++    // Menus render at their own scale and turn this off while loading their images.
++    static void SetDownscaleEnabled(bool enabled);
++
+     inline SDL_Texture* GetTexture() { return m_pTexture; }
+     inline int GetWidth() { return m_Width; }
+     inline int GetHeight() { return m_Height; }
 diff --git a/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp b/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp
 index 285bc0c..e078c7c 100644
 --- a/OpenClaw/Engine/Physics/PhysicsDebugDrawer.cpp
@@ -196,6 +588,131 @@ index 285bc0c..e078c7c 100644
  
  // Conversion warnings from Box2D -> SDL2_gfx
  #pragma warning(disable: 4244)
+diff --git a/OpenClaw/Engine/Scene/ActorSceneNode.cpp b/OpenClaw/Engine/Scene/ActorSceneNode.cpp
+index b773016..05aa4d6 100644
+--- a/OpenClaw/Engine/Scene/ActorSceneNode.cpp
++++ b/OpenClaw/Engine/Scene/ActorSceneNode.cpp
+@@ -75,6 +75,14 @@ void SDL2ActorSceneNode::VRender(Scene* pScene)
+     SDL_SetTextureColorMod(actorImage->GetTexture(), colorMod.r, colorMod.g, colorMod.b);
+ 
+     SDL_Renderer* renderer = pScene->GetRenderer();
++#ifdef __3DS__
++    if (!arc->IsMirrored())
++    {
++        // SDL's software renderer sends every RenderCopyEx through a slow rotozoom path, even at 0 degrees
++        SDL_RenderCopy(renderer, actorImage->GetTexture(), NULL, &renderRect);
++        return;
++    }
++#endif
+     SDL_RenderCopyEx(renderer, actorImage->GetTexture(), NULL, &renderRect, 0, NULL, 
+         arc->IsMirrored() ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+ }
+diff --git a/OpenClaw/Engine/Scene/HUDSceneNode.cpp b/OpenClaw/Engine/Scene/HUDSceneNode.cpp
+index bfcaa7f..beb0251 100644
+--- a/OpenClaw/Engine/Scene/HUDSceneNode.cpp
++++ b/OpenClaw/Engine/Scene/HUDSceneNode.cpp
+@@ -69,6 +69,13 @@ void SDL2HUDSceneNode::VRender(Scene* pScene)
+     };
+ 
+     SDL_Renderer* renderer = pScene->GetRenderer();
++#ifdef __3DS__
++    if (!hrc->IsMirrored())
++    {
++        SDL_RenderCopy(renderer, actorImage->GetTexture(), NULL, &renderRect);
++        return;
++    }
++#endif
+     SDL_RenderCopyEx(renderer, actorImage->GetTexture(), NULL, &renderRect, 0, NULL,
+         hrc->IsMirrored() ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+ }
+\ No newline at end of file
+diff --git a/OpenClaw/Engine/UserInterface/HumanView.cpp b/OpenClaw/Engine/UserInterface/HumanView.cpp
+index ec64d79..5e509da 100644
+--- a/OpenClaw/Engine/UserInterface/HumanView.cpp
++++ b/OpenClaw/Engine/UserInterface/HumanView.cpp
+@@ -1,4 +1,7 @@
+ #include "HumanView.h"
++#ifdef __3DS__
++#include "Platform3DS.h"
++#endif
+ #include "../GameApp/BaseGameApp.h"
+ #include "../GameApp/BaseGameLogic.h"
+ #include "../Events/EventMgr.h"
+@@ -85,6 +88,10 @@ void HumanView::VOnRender(uint32 msDiff)
+ 
+         SDL_RenderClear(renderer);
+ 
++#ifdef __3DS__
++        {
++        Prof3DS prof(5);
++#endif
+         // Sort screen elements
+         m_ScreenElements.sort(SortBy_SharedPtr_Content<IScreenElement>());
+ 
+@@ -95,6 +102,9 @@ void HumanView::VOnRender(uint32 msDiff)
+                 screenElement->VOnRender(msDiff);
+             }
+         }
++#ifdef __3DS__
++        }
++#endif
+         //LOG("SCREEN ELEMENTS: " + ToStr(m_ScreenElements.size()))
+ 
+         g_pApp->GetGameLogic()->VRenderDiagnostics(renderer, m_pCamera);
+@@ -103,6 +113,9 @@ void HumanView::VOnRender(uint32 msDiff)
+ 
+         if (!m_bPostponeRenderPresent)
+         {
++#ifdef __3DS__
++            Prof3DS prof(6);
++#endif
+             SDL_RenderPresent(renderer);
+         }
+     }
+@@ -664,6 +677,17 @@ void HumanView::LoadGameDelegate(IEventDataPtr pEventData)
+     shared_ptr<EventData_Menu_LoadGame> pCastEventData =
+         static_pointer_cast<EventData_Menu_LoadGame>(pEventData);
+     
++#ifdef __3DS__
++    // A duplicated "load game" event (e.g. double menu press) must not reload a level that is
++    // already loaded - the second load runs out of memory.
++    GameState currentState = g_pApp->GetGameLogic()->GetGameState();
++    if (currentState == GameState_LoadingLevel || currentState == GameState_IngameRunning)
++    {
++        LOG_WARNING("Ignoring duplicate load game request");
++        return;
++    }
++#endif
++
+     if (pCastEventData)
+     {
+         bool isNewGame = pCastEventData->GetIsNewGame();
+diff --git a/OpenClaw/Engine/UserInterface/UserInterface.cpp b/OpenClaw/Engine/UserInterface/UserInterface.cpp
+index 9966337..668e181 100644
+--- a/OpenClaw/Engine/UserInterface/UserInterface.cpp
++++ b/OpenClaw/Engine/UserInterface/UserInterface.cpp
+@@ -162,7 +162,10 @@ static shared_ptr<Image> LoadImageFromXmlElement(TiXmlElement* pElem)
+     }
+     else if (extension == ".pid")
+     {
++        // Menus render at their own scale, so their images must keep full size
++        Image::SetDownscaleEnabled(false);
+         pImage = PidResourceLoader::LoadAndReturnImage(imagePath.c_str(), g_pApp->GetCurrentPalette());
++        Image::SetDownscaleEnabled(true);
+     }
+     else if (extension == ".jpg")
+     {
+@@ -1370,8 +1373,8 @@ void ScreenElementMenuItem::OnStateChanged(MenuItemState newState, MenuItemState
+ 
+ SDL_Rect ScreenElementMenuItem::GetMenuItemRect()
+ {
+-    int itemWidth, itemHeight;
+-    SDL_QueryTexture(m_Images[m_State]->GetTexture(), NULL, NULL, &itemWidth, &itemHeight);
++    int itemWidth = m_Images[m_State]->GetWidth();
++    int itemHeight = m_Images[m_State]->GetHeight();
+ 
+     SDL_Rect itemRect;
+     itemRect.x = (int)m_Position.x;
 diff --git a/OpenClaw/main.cpp b/OpenClaw/main.cpp
 index c8ebffc..edde0e3 100644
 --- a/OpenClaw/main.cpp
@@ -224,3 +741,175 @@ index c8ebffc..edde0e3 100644
      return RunGameEngine(argc, argv);
 +#endif
  }
+diff --git a/libwap/RezArchiveFile.cpp b/libwap/RezArchiveFile.cpp
+index 44d2f6e..61153ec 100644
+--- a/libwap/RezArchiveFile.cpp
++++ b/libwap/RezArchiveFile.cpp
+@@ -8,6 +8,9 @@
+ #include <string>
+ #include <string.h>
+ #include <cctype>
++#include <cstdio>
++#include <istream>
++#include <streambuf>
+ 
+ #include "libwap.h"
+ #include <iostream>
+@@ -42,12 +45,96 @@ uint8_t directorySeparator = '/';
+ /*************************************************************************/
+ 
+ template<typename T>
+-static void FileRead(T* dest, std::ifstream* file, int32_t offset)
++static void FileRead(T* dest, std::istream* file, int32_t offset)
+ {
+     file->seekg(offset, std::ios::beg);
+     file->read((char*)dest, sizeof(*dest));
+ }
+ 
++// Read-only streambuf that serves reads out of a large in-memory window instead of hitting
++// the underlying file for every tiny seek/read. Parsing the REZ directory tree does tens of
++// thousands of 1-4 byte reads; on platforms with slow small-read file access (3DS SD card)
++// that takes minutes, while block reads make it nearly instant. Positions are absolute file
++// offsets, so it is a drop-in replacement for the file stream while reading directory entries.
++class RezBlockBuf : public std::streambuf
++{
++public:
++    RezBlockBuf(std::istream* source, std::streamoff fileSize)
++        : m_source(source), m_fileSize(fileSize), m_winStart(0), m_winLen(0), m_pendingPos(0), m_window(kBlockSize)
++    {
++        setg(0, 0, 0);
++    }
++
++protected:
++    std::streamoff AbsPos() const
++    {
++        return (eback() == 0) ? m_pendingPos : (m_winStart + (gptr() - eback()));
++    }
++
++    pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode) override
++    {
++        std::streamoff target;
++        if (dir == std::ios_base::beg) target = off;
++        else if (dir == std::ios_base::cur) target = AbsPos() + off;
++        else target = m_fileSize + off;
++
++        if (target < 0 || target > m_fileSize)
++        {
++            return pos_type(off_type(-1));
++        }
++
++        if (m_winLen > 0 && target >= m_winStart && target <= m_winStart + (std::streamoff)m_winLen)
++        {
++            setg(m_window.data(), m_window.data() + (target - m_winStart), m_window.data() + m_winLen);
++        }
++        else
++        {
++            setg(0, 0, 0);
++            m_pendingPos = target;
++        }
++        return pos_type(target);
++    }
++
++    pos_type seekpos(pos_type pos, std::ios_base::openmode which) override
++    {
++        return seekoff(off_type(pos), std::ios_base::beg, which);
++    }
++
++    int_type underflow() override
++    {
++        std::streamoff pos = AbsPos();
++        if (pos >= m_fileSize)
++        {
++            return traits_type::eof();
++        }
++
++        m_source->clear();
++        m_source->seekg(pos, std::ios::beg);
++        m_source->read(m_window.data(), (std::streamsize)m_window.size());
++        std::streamsize got = m_source->gcount();
++        m_source->clear();
++        if (got <= 0)
++        {
++            return traits_type::eof();
++        }
++
++        m_winStart = pos;
++        m_winLen = (size_t)got;
++        setg(m_window.data(), m_window.data(), m_window.data() + m_winLen);
++        return traits_type::to_int_type(*gptr());
++    }
++
++private:
++    static const size_t kBlockSize = 64 * 1024;
++
++    std::istream* m_source;
++    std::streamoff m_fileSize;
++    std::streamoff m_winStart;
++    size_t m_winLen;
++    std::streamoff m_pendingPos;
++    std::vector<char> m_window;
++};
++
+ static char* StdStringToCharArray(std::string source)
+ {
+     char* ret = new char[source.length() + 1];
+@@ -450,7 +537,7 @@ uint32_t WAP_GetRezFilesCount(RezArchive* rezArchive)
+     return g_rezArchiveFilesMap[rezArchive]->size();
+ }
+ 
+-static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory, std::ifstream* fileStream)
++static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory, std::istream* fileStream)
+ {
+     uint32_t i;
+     uint32_t currentOffset = rezDirectory->offset;
+@@ -495,7 +582,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
+             while (true)
+             {
+                 char c = fileStream->get();
+-                if (c == 0)
++                if (c == 0 || !fileStream->good())
+                 {
+                     break;
+                 }
+@@ -541,7 +628,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
+             while (true)
+             {
+                 char c = fileStream->get();
+-                if (c == 0)
++                if (c == 0 || !fileStream->good())
+                 {
+                     break;
+                 }
+@@ -634,8 +721,20 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+         return NULL;
+     }
+ 
+-    // Recursively read all directories
+-    ReadRezDirectory(rezArchive, rezArchive->rootDirectory, fileStream);
++#ifdef __3DS__
++    fprintf(stderr, "[libwap] REZ header ok (%lld bytes), reading directory tree...\n", (long long)actualLoadedFileSize);
++#endif
++    // Recursively read all directories (through a block cache - see RezBlockBuf)
++    fileStream->clear();
++    {
++        RezBlockBuf blockBuf(fileStream, actualLoadedFileSize);
++        std::istream cachedStream(&blockBuf);
++        ReadRezDirectory(rezArchive, rezArchive->rootDirectory, &cachedStream);
++    }
++    fileStream->clear();
++#ifdef __3DS__
++    fprintf(stderr, "[libwap] REZ directory tree read, building file map...\n");
++#endif
+ 
+     // Register loaded REZ archive file
+     RegisterRezArchiveFile(rezArchive, fileStream);
+@@ -644,6 +743,9 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+     //START_QUERY_PERFORMANCE_TIMER;
+     CreateRezArchiveFileMap(rezArchive);
+     //END_QUERY_PERFORMANCE_TIMER;
++#ifdef __3DS__
++    fprintf(stderr, "[libwap] REZ archive ready\n");
++#endif
+     return rezArchive;
+ }
+ 

@@ -29,7 +29,7 @@ From the root of your OpenClaw checkout (same level as `OpenClaw/`, `Box2D/`, `l
 Create `sdmc:/3ds/OpenClaw/` and copy:
 
 - `OpenClaw.3dsx` -> `sdmc:/3ds/OpenClaw.3dsx` (or inside that folder)
-- `config.xml` (Old 3DS, 16 MB resource cache) and `config_new3ds.xml` (New 3DS, 48 MB cache)
+- `config.xml` (Old 3DS, 8 MB resource cache) and `config_new3ds.xml` (New 3DS, 16 MB cache)
 - **your own** `CLAW.REZ`
 - `ASSETS.ZIP` = zip of the contents of `Build_Release/ASSETS/`
 - `console02.tga` and `clacon.ttf` from `Build_Release/`
@@ -52,7 +52,16 @@ on every launch) - it contains the game's own error messages and usually says wh
 
 Touch screen events go through OpenClaw's existing touch recognizers (pause tap, weapon tap, ...).
 
+## Debug log
+`log.txt` also records memory use (`[mem] ...` lines: heap, application region free, linear free) at each
+stage of level loading, and writes `[fatal]` lines on out-of-memory or an uncaught C++ exception.
+
 ## What was changed
+- Memory: the malloc heap is capped at ~96 MB by the 3DS address space (level 1 needs more). `3ds/Alloc3DS.cpp`
+  replaces global `new`/`delete` so that, once malloc is exhausted, allocations spill into the otherwise unused
+  linear heap (~30 MB). log.txt prints `spilling ... into the linear heap` when that starts. Do not override
+  `__ctru_heap_size` - a value over ~96 MB crashes the app at launch. The resource cache shares this memory,
+  so keep `ResourceCacheSize` small.
 - libwap: the REZ directory tree is now parsed through a 64 KB block cache (`RezBlockBuf`). The original
   code did ~50k tiny seeks/reads, which takes minutes on the 3DS SD card.
 - Audio: music is OFF by default on 3DS (MIDI through SDL_mixer is too heavy); positional audio

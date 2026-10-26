@@ -41,7 +41,10 @@ CPP_SRCS := $(filter-out $(ROOT)/OpenClaw/Engine/Resource/Miniz.cpp, \
             $(wildcard $(ROOT)/libwap/*.cpp) \
             $(filter-out $(ROOT)/ThirdParty/Tinyxml/xmltest.cpp,$(wildcard $(ROOT)/ThirdParty/Tinyxml/*.cpp)) \
             $(shell find $(ROOT)/Box2D/Box2D -name '*.cpp') \
-            $(ROOT)/3ds/Platform3DS.cpp
+            $(ROOT)/3ds/Platform3DS.cpp \
+            $(ROOT)/3ds/Alloc3DS.cpp \
+            $(ROOT)/3ds/Bench3DS.cpp \
+            $(ROOT)/3ds/Video3DS.cpp
 
 OBJS := $(patsubst $(ROOT)/%.cpp,$(BUILD)/%.o,$(CPP_SRCS))
 DEPS := $(OBJS:.o=.d)
@@ -72,11 +75,12 @@ ifeq ($(MUSIC),1)
 DEFINES  += -DOPENCLAW_3DS_MUSIC
 endif
 
-CFLAGS   := -w -g -Wall -O2 -mword-relocations -ffunction-sections -fomit-frame-pointer -fno-strict-aliasing \
+CFLAGS   := -g -Wall -O2 -mword-relocations -ffunction-sections -fomit-frame-pointer \
             $(ARCH) $(DEFINES) $(INCLUDE)
 CXXFLAGS := $(CFLAGS) -include $(ROOT)/3ds/CompatTypes.h -std=gnu++14 -Wno-reorder -Wno-sign-compare -Wno-unused-variable
 
-LDFLAGS  := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map -L$(CTRULIB)/lib -L$(PORTLIBS)/lib
+# --wrap: Bench3DS.cpp counts SDL_RenderCopy/SDL_RenderCopyEx calls; Video3DS.cpp hooks SDL_RenderPresent
+LDFLAGS  := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map -Wl,--wrap=SDL_RenderCopy -Wl,--wrap=SDL_RenderCopyEx -Wl,--wrap=SDL_RenderPresent -L$(CTRULIB)/lib -L$(PORTLIBS)/lib
 
 LIBS     := $(shell $(PKGCONF) --static --libs $(SDL_PKGS)) -lcitro3d -lctru -lm
 
