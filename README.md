@@ -4,6 +4,8 @@
  - Whole codebase was written from scratch by pjasicek (https://github.com/pjasicek).
  - Game uses assets from original game archive (CLAW.REZ)
 
+***This project serves purely as a proof-of-concept, and in no way I'll try to gain money off of it. The project also has NO files from the original game, and it shouldn't serve as an illegal way to play it.***
+
 **Level 1 youtube playthrough:**
 
 [![OpenClaw - Level 1](https://img.youtube.com/vi/ikXQNV_aw68/0.jpg)](https://www.youtube.com/watch?v=ikXQNV_aw68)
@@ -12,7 +14,9 @@
 
 ### 3DS:
 
-The game is currently 30% complete; the first build (as of Oct. 26, 0.0.1), fully works- with A LOT of lag. If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" in the game's folder for it to actually boot into the level. (ResourceCacheSize).
+With the newest release (0.0.2) the game has decent performnce (27-30 FPS in-game, 48-49 in menus), and managed to load "La Roca" without modifying anything.
+
+The first ever build (0.0.1), works, but gives VERY LOW performance (3-8 FPS). If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" in the game's folder for it to actually boot into the level. (ResourceCacheSize).
 
 Proof:
 
@@ -32,6 +36,12 @@ Proof 2:
 
 
 # Building and running
+
+You can find the pre-compiled '.3dsx'  in Releases, configuration files ("config.xml" and "config_new3ds.xml") can be found in the '3ds' folder in the main branch of the repository.
+
+For game-related files ("ASSETS.ZIP", "CLAW.REZ", "console02.tga", "clacon.ttf", "MENU.xml", "SAVES.xml") MUST be taken from your own copy of the game.
+
+If you'd like to compile the application yourself, the instructions are listed down below:
 
 ## 1. Install the toolchain (on your PC)
 Install devkitPro, then:
