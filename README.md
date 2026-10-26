@@ -12,7 +12,7 @@
 
 ### 3DS:
 
-The game is currently 10% complete; only the menu really works, and if  you try to boot into a level, the game will send you back to The Homebrew Loader.
+The game is currently 30% complete; the first build (as of Oct. 26, 0.0.1), fully works- with A LOT of lag. If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" in the game's folder for it to actually boot into the level. (ResourceCacheSize).
 
 Proof:
 
