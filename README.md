@@ -6,9 +6,6 @@
 
 ***This project serves purely as a proof-of-concept, and in no way I'll try to gain money off of it. The project also has NO files from the original game, and it shouldn't serve as an illegal way to play it.***
 
-**Level 1 youtube playthrough:**
-
-[![OpenClaw - Level 1](https://img.youtube.com/vi/ikXQNV_aw68/0.jpg)](https://www.youtube.com/watch?v=ikXQNV_aw68)
 
 # Build status
 
