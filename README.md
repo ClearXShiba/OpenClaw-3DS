@@ -11,7 +11,9 @@
 
 ### 3DS:
 
-With the newest release (0.0.2) the game has decent performnce (27-30 FPS in-game, 48-49 in menus), and managed to load "La Roca" without modifying anything.
+The third release (0.0.3) finally brought to play some optimization, which means that the game finally reaches 60 fps, with some minor lags (52-60 fps), but still not so bad.
+
+The second release (0.0.2) manages to get some decent performance (27-30 FPS in-game, 48-49 in menus), and managed to load "La Roca" without modifying anything.
 
 The first ever build (0.0.1), works, but gives VERY LOW performance (3-8 FPS). If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" in the game's folder for it to actually boot into the level. (ResourceCacheSize).
 
