@@ -15,7 +15,7 @@ The third release (0.0.3) finally brought to play some optimization (the sprites
 
 The second release (0.0.2) manages to get some decent performance (27-30 FPS in-game, 48-49 in menus), and managed to load "La Roca" without modifying anything.
 
-The first ever build (0.0.1), works, but gives VERY LOW performance (3-8 FPS). If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" in the game's folder for it to actually boot into the level. (ResourceCacheSize).
+The first ever build (0.0.1), works, but gives VERY LOW performance (3-8 FPS). If you try to boot into "La Roca" as is, the game either crashes or boots you back to The Homebrew Loader. You need to modify the "config_new3ds.xml" (or "config.xml", used by o3DS models) - specifically the "ResourceCacheSize" line - in the game's folder for it to actually boot into the level.
 
 Proof:
 
