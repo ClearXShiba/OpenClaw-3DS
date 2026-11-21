@@ -54,7 +54,7 @@ index 97c8d19..1bc1237 100644
      {
          LOG_ERROR("Mix_SetPosition: " + std::string(Mix_GetError()));
 diff --git a/OpenClaw/Engine/GameApp/BaseGameApp.cpp b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
-index 64533c3..293b7bf 100644
+index 64533c3..9feb2ae 100644
 --- a/OpenClaw/Engine/GameApp/BaseGameApp.cpp
 +++ b/OpenClaw/Engine/GameApp/BaseGameApp.cpp
 @@ -22,6 +22,10 @@
@@ -86,7 +86,7 @@ index 64533c3..293b7bf 100644
      m_pGame = VCreateGameAndView();
      if (!m_pGame)
      {
-@@ -78,11 +86,19 @@ bool BaseGameApp::Initialize(int argc, char** argv)
+@@ -78,18 +86,32 @@ bool BaseGameApp::Initialize(int argc, char** argv)
          return false;
      }
  
@@ -104,11 +104,46 @@ index 64533c3..293b7bf 100644
 +    Platform3DS_LogMemory("after startup preload");
 +#endif
  
++#ifdef OPENCLAW_DIAG
++    fprintf(stderr, "[init] running startup tests\n"); fflush(stderr);
++#endif
      if (!VPerformStartupTests())
      {
-@@ -213,6 +229,11 @@ void BaseGameApp::StepLoop() {
+         LOG_ERROR("Failed to pass certain startup tests.");
+         return false;
+     }
+ 
++#ifdef OPENCLAW_DIAG
++    fprintf(stderr, "[init] startup tests done, init complete\n"); fflush(stderr);
++#endif
+     m_IsRunning = true;
+ 
+     return true;
+@@ -186,6 +208,11 @@ bool BaseGameApp::VPerformStartupTests()
+ }
+ 
+ void BaseGameApp::StepLoop() {
++#ifdef OPENCLAW_DIAG
++    static int s_enter = 0;
++    if (s_enter < 3) { fprintf(stderr, "[loop-enter %d]\n", s_enter); fflush(stderr); }
++    s_enter++;
++#endif
+     static uint32 lastTime = SDL_GetTicks();
+     SDL_Event event;
+     Touch_Event touchEvent;
+@@ -212,7 +239,21 @@ void BaseGameApp::StepLoop() {
+         }
          consecutiveLagSpikes = 0;
  
++#ifdef OPENCLAW_DIAG
++        static int s_diagFrame = 0;
++        const bool diagF = (s_diagFrame < 3);
++#define DIAG_STEP(msg) do { if (diagF) { fprintf(stderr, "[loop %d] %s\n", s_diagFrame, msg); fflush(stderr); } } while (0)
++#else
++#define DIAG_STEP(msg) do {} while (0)
++#endif
++        DIAG_STEP("start");
++
          // Handle all input events
 +#ifdef __3DS__
 +        {
@@ -118,7 +153,7 @@ index 64533c3..293b7bf 100644
          while (SDL_PollEvent(&event))
          {
              OnEvent(event);
-@@ -225,13 +246,23 @@ void BaseGameApp::StepLoop() {
+@@ -225,21 +266,36 @@ void BaseGameApp::StepLoop() {
                  OnEvent(touchEvent.sdlEvent);
              }
          }
@@ -126,6 +161,7 @@ index 64533c3..293b7bf 100644
 +        }
 +#endif
  
++        DIAG_STEP("after input");
          if (m_pGame)
          {
              // Update game
@@ -139,20 +175,36 @@ index 64533c3..293b7bf 100644
 +#ifdef __3DS__
 +                }
 +#endif
++                DIAG_STEP("after event mgr");
                  m_pGame->VOnUpdate(elapsedTime);
++                DIAG_STEP("after VOnUpdate");
              }
  
-@@ -247,6 +278,9 @@ void BaseGameApp::StepLoop() {
+             // Render game
+             for (auto &pGameView : m_pGame->m_GameViews)
+             {
+                 //PROFILE_CPU("ONLY RENDER");
++                DIAG_STEP("before render view");
+                 pGameView->VOnRender(elapsedTime);
++                DIAG_STEP("after render view");
+             }
+             
+             //m_pGame->VRenderDiagnostics();
+@@ -247,6 +303,13 @@ void BaseGameApp::StepLoop() {
  
          // Artificially decrease fps. Configurable from console
          Util::Sleep(m_DebugOptions.cpuDelayMs);
++        DIAG_STEP("end");
++#ifdef OPENCLAW_DIAG
++        s_diagFrame++;
++#endif
 +#ifdef __3DS__
 +        Platform3DS_ProfileEndFrame();
 +#endif
      }
  }
  
-@@ -801,13 +835,22 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
+@@ -801,13 +864,22 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
  
      m_WindowSize.Set(gameOptions.windowWidth, gameOptions.windowHeight);
  
@@ -175,7 +227,7 @@ index 64533c3..293b7bf 100644
      if (m_pRenderer == NULL)
      {
          LOG_ERROR("Failed to create SDL2 Renderer. Error: %s" + std::string(SDL_GetError()));
-@@ -816,6 +859,10 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
+@@ -816,6 +888,10 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
  
      SDL_RenderSetScale(m_pRenderer, (float)gameOptions.scale, (float)gameOptions.scale);
  
@@ -186,7 +238,7 @@ index 64533c3..293b7bf 100644
      LOG("Display successfully initialized.");
  
      return true;
-@@ -859,6 +906,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+@@ -859,6 +935,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
  
      std::string rezArchivePath = gameOptions.assetsFolder + gameOptions.rezArchive;
  
@@ -194,7 +246,7 @@ index 64533c3..293b7bf 100644
      IResourceFile* rezArchive = new ResourceRezArchive(rezArchivePath);
      std::shared_ptr<ResourceCache> m_pResourceCache { new ResourceCache(gameOptions.resourceCacheSize, rezArchive, ORIGINAL_RESOURCE) };
      if (!m_pResourceCache->Init())
-@@ -867,6 +915,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+@@ -867,6 +944,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
          return false;
      }
  
@@ -202,7 +254,7 @@ index 64533c3..293b7bf 100644
      m_pResourceCache->RegisterLoader(DefaultResourceLoader::Create());
      m_pResourceCache->RegisterLoader(XmlResourceLoader::Create());
      m_pResourceCache->RegisterLoader(WwdResourceLoader::Create());
-@@ -879,6 +928,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
+@@ -879,6 +957,7 @@ bool BaseGameApp::InitializeResources(GameOptions& gameOptions)
  
      std::string customArchivePath = gameOptions.assetsFolder + gameOptions.customArchive;
  
@@ -210,6 +262,40 @@ index 64533c3..293b7bf 100644
      IResourceFile* pCustomArchive = new ResourceZipArchive(customArchivePath);
      std::shared_ptr<ResourceCache> pCustomCache{ new ResourceCache(50, pCustomArchive, CUSTOM_RESOURCE) };
      if (!pCustomCache->Init())
+@@ -968,6 +1047,10 @@ bool BaseGameApp::ReadActorXmlPrototypes(GameOptions& gameOptions)
+ 
+     std::vector<std::string> xmlActorPrototypeFiles = m_pResourceMgr->VMatch("/ACTOR_PROTOTYPES/*.XML");
+ 
++#ifdef OPENCLAW_DIAG
++    fprintf(stderr, "[diag] actor prototype xml files matched: %d\n", (int)xmlActorPrototypeFiles.size());
++    int diagIdx = 0;
++#endif
+     for (const std::string& protoFile : xmlActorPrototypeFiles)
+     {
+         TiXmlElement* pActorProtoElem = XmlResourceLoader::LoadAndReturnRootXmlElement(protoFile.c_str());
+@@ -979,6 +1062,12 @@ bool BaseGameApp::ReadActorXmlPrototypes(GameOptions& gameOptions)
+         else
+         {
+             //LOG(protoFile + ": " + protoName);
++#ifdef OPENCLAW_DIAG
++            if (diagIdx++ < 6)
++            {
++                fprintf(stderr, "[diag] %s -> '%s' root=<%s> childSize=%d\n", protoFile.c_str(), protoName.c_str(), pActorProtoElem->Value(), (int)protoName.size());
++            }
++#endif
+             ActorPrototype actorProto = StringToEnum_ActorPrototype(protoName);
+ 
+             // Create our own pointer
+@@ -989,6 +1078,9 @@ bool BaseGameApp::ReadActorXmlPrototypes(GameOptions& gameOptions)
+ 
+             auto iter = m_ActorXmlPrototypeMap.insert(std::make_pair(actorProto, pActorProtoElemDuplicate));
+             if (!iter.second) {
++#ifdef OPENCLAW_DIAG
++                fprintf(stderr, "[diag] DUP: %s has name '%s'\n", protoFile.c_str(), protoName.c_str());
++#endif
+                 LOG_WARNING("Multi " + EnumToString_ActorPrototype(actorProto) + " actor prototype definitions! Fix ASSETS!");
+                 std::string typeName;
+                 if (ParseAttributeFromXmlElem(&typeName, "Type", pActorProtoElem))
 diff --git a/OpenClaw/Engine/GameApp/BaseGameLogic.cpp b/OpenClaw/Engine/GameApp/BaseGameLogic.cpp
 index 5d8dc7d..10d3232 100644
 --- a/OpenClaw/Engine/GameApp/BaseGameLogic.cpp
@@ -427,10 +513,10 @@ index f5c616e..0b0e0d2 100644
      // Initialize game instance
      if (!g_pApp->Initialize(argc, argv))
 diff --git a/OpenClaw/Engine/Graphics2D/Image.cpp b/OpenClaw/Engine/Graphics2D/Image.cpp
-index b6a6159..56a542b 100644
+index b6a6159..09c8e51 100644
 --- a/OpenClaw/Engine/Graphics2D/Image.cpp
 +++ b/OpenClaw/Engine/Graphics2D/Image.cpp
-@@ -76,6 +76,71 @@ static void PutPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
+@@ -76,6 +76,101 @@ static void PutPixel(SDL_Surface *surface, int x, int y, Uint32 pixel)
      }
  }
  
@@ -497,12 +583,42 @@ index b6a6159..56a542b 100644
 +    }
 +    return dst;
 +}
++
++// Renderers with a texture size limit (the PSP GPU: 512x512) cannot hold full-size menu/loading screens.
++// Shrink such a surface by 2 until it fits; the Image keeps reporting the original size (see CreatePcxImage),
++// so the layout code is unchanged and the GPU simply stretches the texture. Renderers without a limit
++// (the 3DS software renderer reports 0) are not affected.
++static SDL_Surface* FitToRenderer(SDL_Surface* s, SDL_Renderer* r)
++{
++    SDL_RendererInfo info;
++    if (SDL_GetRendererInfo(r, &info) != 0 || info.max_texture_width <= 0 || info.max_texture_height <= 0)
++    {
++        return s;
++    }
++    while (s->w > info.max_texture_width || s->h > info.max_texture_height)
++    {
++        SDL_Surface* rgba = SDL_ConvertSurfaceFormat(s, (SDL_BYTEORDER == SDL_BIG_ENDIAN) ? SDL_PIXELFORMAT_RGBA8888 : SDL_PIXELFORMAT_ABGR8888, 0) /* bytes R,G,B,A in memory */;
++        if (rgba == NULL)
++        {
++            return s;
++        }
++        SDL_Surface* half = DownscaleHalf(rgba);
++        SDL_FreeSurface(rgba);
++        if (half == NULL)
++        {
++            return s;
++        }
++        SDL_FreeSurface(s);
++        s = half;
++    }
++    return s;
++}
 +#endif
 +
  SDL_Texture* Image::GetTextureFromPid(WapPid* pid, SDL_Renderer* renderer)
  {
      assert(pid != NULL);
-@@ -98,9 +163,52 @@ SDL_Texture* Image::GetTextureFromPid(WapPid* pid, SDL_Renderer* renderer)
+@@ -98,9 +193,52 @@ SDL_Texture* Image::GetTextureFromPid(WapPid* pid, SDL_Renderer* renderer)
          PutPixel(surface, x, y, SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
      }
  
@@ -555,6 +671,52 @@ index b6a6159..56a542b 100644
      SDL_FreeSurface(surface);
  
      return texture;
+@@ -135,6 +273,10 @@ Image* Image::CreatePcxImage(char* rawBuffer, uint32_t size, SDL_Renderer* rende
+         SDL_SetColorKey(pSurface, SDL_TRUE, SDL_MapRGB(pSurface->format, colorKey.r, colorKey.g, colorKey.b));
+     }
+ 
++#ifdef __3DS__
++    const int origW = pSurface->w, origH = pSurface->h;
++    pSurface = FitToRenderer(pSurface, renderer);
++#endif
+     SDL_Texture* pTexture = SDL_CreateTextureFromSurface(renderer, pSurface);
+     SDL_FreeSurface(pSurface);
+ 
+@@ -153,6 +295,11 @@ Image* Image::CreatePcxImage(char* rawBuffer, uint32_t size, SDL_Renderer* rende
+         return NULL;
+     }
+ 
++#ifdef __3DS__
++    pImage->m_Width = origW;
++    pImage->m_Height = origH;
++#endif
++
+     return pImage;
+ }
+ 
+@@ -168,6 +315,10 @@ Image* Image::CreatePngImage(char* rawBuffer, uint32_t size, SDL_Renderer* rende
+         return NULL;
+     }
+ 
++#ifdef __3DS__
++    const int origW = pSurface->w, origH = pSurface->h;
++    pSurface = FitToRenderer(pSurface, renderer);
++#endif
+     SDL_Texture* pTexture = SDL_CreateTextureFromSurface(renderer, pSurface);
+     SDL_FreeSurface(pSurface);
+ 
+@@ -186,6 +337,11 @@ Image* Image::CreatePngImage(char* rawBuffer, uint32_t size, SDL_Renderer* rende
+         return NULL;
+     }
+ 
++#ifdef __3DS__
++    pImage->m_Width = origW;
++    pImage->m_Height = origH;
++#endif
++
+     return pImage;
+ }
+ 
 diff --git a/OpenClaw/Engine/Graphics2D/Image.h b/OpenClaw/Engine/Graphics2D/Image.h
 index b789c4c..1a65cb3 100644
 --- a/OpenClaw/Engine/Graphics2D/Image.h
@@ -588,6 +750,97 @@ index 285bc0c..e078c7c 100644
  
  // Conversion warnings from Box2D -> SDL2_gfx
  #pragma warning(disable: 4244)
+diff --git a/OpenClaw/Engine/Resource/ZipFile.cpp b/OpenClaw/Engine/Resource/ZipFile.cpp
+index f90a891..f783e22 100644
+--- a/OpenClaw/Engine/Resource/ZipFile.cpp
++++ b/OpenClaw/Engine/Resource/ZipFile.cpp
+@@ -113,6 +113,37 @@ struct ZipFile::TZipDirFileHeader
+ 
+ #pragma pack()
+ 
++#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++static inline uint16 ZipSwap16(uint16 v) { return (uint16)((v >> 8) | (v << 8)); }
++static inline uint32 ZipSwap32(uint32 v) { return (v >> 24) | ((v >> 8) & 0xff00u) | ((v << 8) & 0xff0000u) | (v << 24); }
++void ZipFile::ByteSwap(TZipDirHeader& h)
++{
++    h.sig = ZipSwap32(h.sig); h.nDisk = ZipSwap16(h.nDisk); h.nStartDisk = ZipSwap16(h.nStartDisk);
++    h.nDirEntries = ZipSwap16(h.nDirEntries); h.totalDirEntries = ZipSwap16(h.totalDirEntries);
++    h.dirSize = ZipSwap32(h.dirSize); h.dirOffset = ZipSwap32(h.dirOffset); h.cmntLen = ZipSwap16(h.cmntLen);
++}
++void ZipFile::ByteSwap(TZipDirFileHeader& h)
++{
++    h.sig = ZipSwap32(h.sig); h.verMade = ZipSwap16(h.verMade); h.verNeeded = ZipSwap16(h.verNeeded);
++    h.flag = ZipSwap16(h.flag); h.compression = ZipSwap16(h.compression); h.modTime = ZipSwap16(h.modTime);
++    h.modDate = ZipSwap16(h.modDate); h.crc32 = ZipSwap32(h.crc32); h.cSize = ZipSwap32(h.cSize);
++    h.ucSize = ZipSwap32(h.ucSize); h.fnameLen = ZipSwap16(h.fnameLen); h.xtraLen = ZipSwap16(h.xtraLen);
++    h.cmntLen = ZipSwap16(h.cmntLen); h.diskStart = ZipSwap16(h.diskStart); h.intAttr = ZipSwap16(h.intAttr);
++    h.extAttr = ZipSwap32(h.extAttr); h.hdrOffset = ZipSwap32(h.hdrOffset);
++}
++void ZipFile::ByteSwap(TZipLocalHeader& h)
++{
++    h.sig = ZipSwap32(h.sig); h.version = ZipSwap16(h.version); h.flag = ZipSwap16(h.flag);
++    h.compression = ZipSwap16(h.compression); h.modTime = ZipSwap16(h.modTime); h.modDate = ZipSwap16(h.modDate);
++    h.crc32 = ZipSwap32(h.crc32); h.cSize = ZipSwap32(h.cSize); h.ucSize = ZipSwap32(h.ucSize);
++    h.fnameLen = ZipSwap16(h.fnameLen); h.xtraLen = ZipSwap16(h.xtraLen);
++}
++#else
++void ZipFile::ByteSwap(TZipDirHeader&) {}
++void ZipFile::ByteSwap(TZipDirFileHeader&) {}
++void ZipFile::ByteSwap(TZipLocalHeader&) {}
++#endif
++
+ static bool IsZipDir(const std::string& node)
+ {
+     return node.back() == '/';
+@@ -151,6 +182,7 @@ bool ZipFile::Init(const std::string &resFileName)
+     memset(&dh, 0, sizeof(dh));
+     if (fread(&dh, sizeof(dh), 1, m_pFile) != 1)
+         return false;
++    ByteSwap(dh);
+ 
+     // Check
+     if (dh.sig != TZipDirHeader::SIGNATURE)
+@@ -181,6 +213,8 @@ bool ZipFile::Init(const std::string &resFileName)
+         TZipDirFileHeader &fh = *(TZipDirFileHeader*)pfh;
+ 
+         // Store the address of nth file for quicker access.
++        ByteSwap(fh); // in place, once
++
+         m_papDir[i] = &fh;
+ 
+         // Check the directory entry integrity.
+@@ -339,6 +373,7 @@ bool ZipFile::ReadFile(int i, void *pBuf)
+     memset(&h, 0, sizeof(h));
+     if (fread(&h, sizeof(h), 1, m_pFile) != 1)
+         return false;
++    ByteSwap(h);
+     if (h.sig != TZipLocalHeader::SIGNATURE)
+         return false;
+ 
+@@ -415,6 +450,7 @@ bool ZipFile::ReadLargeFile(int i, void *pBuf, void(*progressCallback)(int, bool
+     memset(&h, 0, sizeof(h));
+     if (fread(&h, sizeof(h), 1, m_pFile) != 1)
+         return false;
++    ByteSwap(h);
+     if (h.sig != TZipLocalHeader::SIGNATURE)
+         return false;
+ 
+diff --git a/OpenClaw/Engine/Resource/ZipFile.h b/OpenClaw/Engine/Resource/ZipFile.h
+index d5945e6..7f0beb2 100644
+--- a/OpenClaw/Engine/Resource/ZipFile.h
++++ b/OpenClaw/Engine/Resource/ZipFile.h
+@@ -54,6 +54,11 @@ private:
+     struct TZipDirFileHeader;
+     struct TZipLocalHeader;
+ 
++    // Zip headers are little-endian; these are no-ops on little-endian machines
++    static void ByteSwap(TZipDirHeader& h);
++    static void ByteSwap(TZipDirFileHeader& h);
++    static void ByteSwap(TZipLocalHeader& h);
++
+     FILE *m_pFile;        // Zip file
+     char *m_pDirData;    // Raw data buffer.
+     int  m_nEntries;    // Number of entries.
 diff --git a/OpenClaw/Engine/Scene/ActorSceneNode.cpp b/OpenClaw/Engine/Scene/ActorSceneNode.cpp
 index b773016..05aa4d6 100644
 --- a/OpenClaw/Engine/Scene/ActorSceneNode.cpp
@@ -713,6 +966,52 @@ index 9966337..668e181 100644
  
      SDL_Rect itemRect;
      itemRect.x = (int)m_Position.x;
+diff --git a/OpenClaw/Engine/Util/Converters.cpp b/OpenClaw/Engine/Util/Converters.cpp
+index c51d2ee..283d3a9 100644
+--- a/OpenClaw/Engine/Util/Converters.cpp
++++ b/OpenClaw/Engine/Util/Converters.cpp
+@@ -44,6 +44,9 @@ TiXmlElement* WwdToXml(WapWwd* wapWwd, int levelNumber)
+     TiXmlElement* tileDescRootElem = new TiXmlElement("TileDescriptions");
+     levelProperties->LinkEndChild(tileDescRootElem);
+     int numTileDescriptions = wapWwd->tileDescriptionsCount;
++#ifdef OPENCLAW_DIAG
++    fprintf(stderr, "[diag] WwdToXml tile descriptions: %d, planes: %d\n", numTileDescriptions, (int)wapWwd->properties.numPlanes);
++#endif
+     for (int tileDescIdx = 0; tileDescIdx < numTileDescriptions; tileDescIdx++)
+     {
+         WwdTileDescription& wwdTileDesc = wapWwd->tileDescriptions[tileDescIdx];
+@@ -165,6 +168,11 @@ TiXmlElement* WwdToXml(WapWwd* wapWwd, int levelNumber)
+         TiXmlElement* tiles = new TiXmlElement("Tiles");
+         planeRenderComponentElem->LinkEndChild(tiles);
+ 
++#ifdef OPENCLAW_DIAG
++        fprintf(stderr, "[diag] WwdToXml plane %d '%s': tiles %u, planePx %dx%d, tilePx %dx%d, tilePtr %p\n", (int)planeIdx, wwdPlane.properties.name,
++            (unsigned)wwdPlane.tilesCount, (int)wwdPlane.properties.pixelWidth, (int)wwdPlane.properties.pixelHeight,
++            (int)wwdPlane.properties.tilePixelWidth, (int)wwdPlane.properties.tilePixelHeight, (void*)wwdPlane.tiles);
++#endif
+         uint32 tilesCount = wwdPlane.tilesCount;
+         int32* pTiles = wwdPlane.tiles;
+         for (uint32 tileIdx = 0; tileIdx < tilesCount; ++tileIdx)
+@@ -185,6 +193,9 @@ TiXmlElement* WwdToXml(WapWwd* wapWwd, int levelNumber)
+     TiXmlElement* actorsElem = new TiXmlElement("Actors");
+     root->LinkEndChild(actorsElem);
+ 
++#ifdef OPENCLAW_DIAG
++    fprintf(stderr, "[diag] WwdToXml planes done, main plane %d, objects %u\n", mainPlaneIdx, (unsigned)wapWwd->planes[mainPlaneIdx].objectsCount);
++#endif
+     WwdObject* wwdActors = wapWwd->planes[mainPlaneIdx].objects;
+     uint32 actorsCount = wapWwd->planes[mainPlaneIdx].objectsCount;
+ 
+@@ -198,6 +209,9 @@ TiXmlElement* WwdToXml(WapWwd* wapWwd, int levelNumber)
+     for (uint32 actorIdx = 0; actorIdx < actorsCount; actorIdx++)
+     {
+         WwdObject actorProperties = wwdActors[actorIdx];
++#ifdef OPENCLAW_DIAG
++        fprintf(stderr, "[obj %u/%u] logic='%s' name='%s' imageSet='%s'\n", (unsigned)actorIdx, (unsigned)actorsCount, actorProperties.logic, actorProperties.name, actorProperties.imageSet);
++#endif
+ 
+         WwdObject* wwdObject = &actorProperties;
+         FixupWwdObject(wwdObject, levelNumber);
 diff --git a/OpenClaw/main.cpp b/OpenClaw/main.cpp
 index c8ebffc..edde0e3 100644
 --- a/OpenClaw/main.cpp
@@ -742,7 +1041,7 @@ index c8ebffc..edde0e3 100644
 +#endif
  }
 diff --git a/libwap/RezArchiveFile.cpp b/libwap/RezArchiveFile.cpp
-index 44d2f6e..61153ec 100644
+index 44d2f6e..10df5dc 100644
 --- a/libwap/RezArchiveFile.cpp
 +++ b/libwap/RezArchiveFile.cpp
 @@ -8,6 +8,9 @@
@@ -755,7 +1054,7 @@ index 44d2f6e..61153ec 100644
  
  #include "libwap.h"
  #include <iostream>
-@@ -42,12 +45,96 @@ uint8_t directorySeparator = '/';
+@@ -42,12 +45,100 @@ uint8_t directorySeparator = '/';
  /*************************************************************************/
  
  template<typename T>
@@ -764,6 +1063,10 @@ index 44d2f6e..61153ec 100644
  {
      file->seekg(offset, std::ios::beg);
      file->read((char*)dest, sizeof(*dest));
++#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
++    // REZ files are little-endian (e.g. Wii/PS3 are big-endian machines)
++    std::reverse((char*)dest, (char*)dest + sizeof(*dest));
++#endif
  }
  
 +// Read-only streambuf that serves reads out of a large in-memory window instead of hitting
@@ -853,7 +1156,7 @@ index 44d2f6e..61153ec 100644
  static char* StdStringToCharArray(std::string source)
  {
      char* ret = new char[source.length() + 1];
-@@ -450,7 +537,7 @@ uint32_t WAP_GetRezFilesCount(RezArchive* rezArchive)
+@@ -450,7 +541,7 @@ uint32_t WAP_GetRezFilesCount(RezArchive* rezArchive)
      return g_rezArchiveFilesMap[rezArchive]->size();
  }
  
@@ -862,7 +1165,7 @@ index 44d2f6e..61153ec 100644
  {
      uint32_t i;
      uint32_t currentOffset = rezDirectory->offset;
-@@ -495,7 +582,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
+@@ -495,7 +586,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
              while (true)
              {
                  char c = fileStream->get();
@@ -871,7 +1174,7 @@ index 44d2f6e..61153ec 100644
                  {
                      break;
                  }
-@@ -541,7 +628,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
+@@ -541,7 +632,7 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
              while (true)
              {
                  char c = fileStream->get();
@@ -880,7 +1183,26 @@ index 44d2f6e..61153ec 100644
                  {
                      break;
                  }
-@@ -634,8 +721,20 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+@@ -604,6 +695,9 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+     std::ifstream* fileStream = new std::ifstream(rezFilePath, std::ifstream::binary);
+     if (!fileStream->is_open())
+     {
++#ifdef __3DS__
++        fprintf(stderr, "[libwap] could not open REZ file: %s\n", rezFilePath);
++#endif
+         return NULL;
+     }
+ 
+@@ -630,12 +724,29 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+     // If this check fails, we did not load valid REZ file
+     if (expectedRezArchiveSize != actualLoadedFileSize)
+     {
++#ifdef __3DS__
++        fprintf(stderr, "[libwap] REZ size check failed: dir offset %u + size %u = %u, file is %lld bytes; version %u; header starts '%.8s'\n",
++            (unsigned)rezArchive->rootDirectory->offset, (unsigned)rezArchive->rootDirectory->size,
++            (unsigned)expectedRezArchiveSize, (long long)actualLoadedFileSize, (unsigned)rezArchive->version, rezArchive->header);
++#endif
+         WAP_DestroyRezArchive(rezArchive);
          return NULL;
      }
  
@@ -903,7 +1225,7 @@ index 44d2f6e..61153ec 100644
  
      // Register loaded REZ archive file
      RegisterRezArchiveFile(rezArchive, fileStream);
-@@ -644,6 +743,9 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
+@@ -644,6 +755,9 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
      //START_QUERY_PERFORMANCE_TIMER;
      CreateRezArchiveFileMap(rezArchive);
      //END_QUERY_PERFORMANCE_TIMER;

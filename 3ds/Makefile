@@ -23,7 +23,7 @@ ROOT            := $(abspath $(CURDIR)/..)
 APP_TITLE       := OpenClaw
 APP_DESCRIPTION := Captain Claw (1997) reimplementation
 APP_AUTHOR      := OpenClaw 3DS port
-ICON            := $(DEVKITPRO)/libctru/default_icon.png
+ICON            := $(if $(wildcard $(CURDIR)/icon.png),$(CURDIR)/icon.png,$(DEVKITPRO)/libctru/default_icon.png)
 
 #---------------------------------------------------------------------------------
 # Sources
@@ -44,7 +44,8 @@ CPP_SRCS := $(filter-out $(ROOT)/OpenClaw/Engine/Resource/Miniz.cpp, \
             $(ROOT)/3ds/Platform3DS.cpp \
             $(ROOT)/3ds/Alloc3DS.cpp \
             $(ROOT)/3ds/Bench3DS.cpp \
-            $(ROOT)/3ds/Video3DS.cpp
+            $(ROOT)/3ds/Video3DS.cpp \
+            $(ROOT)/3ds/Gpu3DS.cpp
 
 OBJS := $(patsubst $(ROOT)/%.cpp,$(BUILD)/%.o,$(CPP_SRCS))
 DEPS := $(OBJS:.o=.d)
@@ -79,10 +80,17 @@ CFLAGS   := -g -Wall -O2 -mword-relocations -ffunction-sections -fomit-frame-poi
             $(ARCH) $(DEFINES) $(INCLUDE)
 CXXFLAGS := $(CFLAGS) -include $(ROOT)/3ds/CompatTypes.h -std=gnu++14 -Wno-reorder -Wno-sign-compare -Wno-unused-variable
 
-# --wrap: Bench3DS.cpp counts SDL_RenderCopy/SDL_RenderCopyEx calls; Video3DS.cpp hooks SDL_RenderPresent
-LDFLAGS  := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map -Wl,--wrap=SDL_RenderCopy -Wl,--wrap=SDL_RenderCopyEx -Wl,--wrap=SDL_RenderPresent -L$(CTRULIB)/lib -L$(PORTLIBS)/lib
+# Gpu3DS.cpp takes over these SDL calls (GPU renderer); they fall through to SDL when the GPU path is off
+comma := ,
+GPU_WRAPS := SDL_CreateTextureFromSurface SDL_DestroyTexture SDL_QueryTexture SDL_SetTextureColorMod \
+             SDL_SetTextureAlphaMod SDL_SetTextureBlendMode SDL_RenderClear SDL_RenderFillRect SDL_RenderDrawPoint \
+             SDL_SetRenderDrawColor SDL_RenderReadPixels SDL_GetRendererInfo SDL_DestroyRenderer
 
-LIBS     := $(shell $(PKGCONF) --static --libs $(SDL_PKGS)) -lcitro3d -lctru -lm
+# --wrap: Bench3DS.cpp counts SDL_RenderCopy/SDL_RenderCopyEx calls; Video3DS.cpp hooks SDL_RenderPresent
+LDFLAGS  := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map -Wl,--wrap=SDL_RenderCopy -Wl,--wrap=SDL_RenderCopyEx -Wl,--wrap=SDL_RenderPresent \
+            $(addprefix -Wl$(comma)--wrap=,$(GPU_WRAPS)) -L$(CTRULIB)/lib -L$(PORTLIBS)/lib
+
+LIBS     := $(shell $(PKGCONF) --static --libs $(SDL_PKGS)) -lcitro2d -lcitro3d -lctru -lm
 
 #---------------------------------------------------------------------------------
 .PHONY: all clean
@@ -93,7 +101,7 @@ $(TARGET).3dsx: $(TARGET).elf $(TARGET).smdh
 	@echo "  3DSXTOOL $@"
 	@$(DEVKITPRO)/tools/bin/3dsxtool $< $@ --smdh=$(TARGET).smdh
 
-$(TARGET).smdh:
+$(TARGET).smdh: $(ICON)
 	@echo "  SMDHTOOL $@"
 	@$(DEVKITPRO)/tools/bin/smdhtool --create "$(APP_TITLE)" "$(APP_DESCRIPTION)" "$(APP_AUTHOR)" $(ICON) $@
 

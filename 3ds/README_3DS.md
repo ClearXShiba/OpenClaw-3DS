@@ -25,6 +25,19 @@ From the root of your OpenClaw checkout (same level as `OpenClaw/`, `Box2D/`, `l
     make            # -> OpenClaw.3dsx
     make MUSIC=1    # optional: keep the SDL_mixer MIDI music path (heavy, likely too slow)
 
+## GPU renderer (new)
+Drawing now goes through the 3DS GPU (citro2d) instead of SDL's software renderer. The game code is unchanged:
+`Gpu3DS.cpp` takes over the SDL render/texture calls at link time. Needs `3ds-dev` (citro2d is included).
+
+- `log.txt` shows `[gpu] citro2d renderer ready` when it is active, and a `[gpu] textures ...` line next to each `[mem]` line.
+- If it misbehaves, create an empty file `sdmc:/3ds/OpenClaw/software_render.txt` to switch back to the old software renderer.
+- If the picture appears upside down, create an empty file `sdmc:/3ds/OpenClaw/gpu_flip.txt` (swaps the texture row order).
+- Sprites are padded to power-of-two sizes on the GPU. When linear memory runs low, new textures are stored as
+  16 bit (`in 16 bit` in the `[gpu]` line).
+
+## App icon
+`icon.png` (48x48) is the icon shown in the Homebrew Launcher. Replace it with your own 48x48 PNG and run `make` again.
+
 ## 4. Put files on the SD card
 Create `sdmc:/3ds/OpenClaw/` and copy:
 

@@ -5,6 +5,7 @@
 //  - __wrap_SDL_RenderCopy / __wrap_SDL_RenderCopyEx: count draw calls (linked with -Wl,--wrap=...)
 
 #include "Platform3DS.h"
+#include "Gpu3DS.h"
 
 #include <SDL2/SDL.h>
 
@@ -53,6 +54,10 @@ extern "C" int __wrap_SDL_RenderCopy(SDL_Renderer* r, SDL_Texture* t, const SDL_
 {
     s_copies++;
     CountCopy(r, t, src, dst);
+    if (Gpu3DS_Active())
+    {
+        return Gpu3DS_RenderCopy(r, t, src, dst, 0.0, NULL, SDL_FLIP_NONE);
+    }
     return __real_SDL_RenderCopy(r, t, src, dst);
 }
 
@@ -61,6 +66,10 @@ extern "C" int __wrap_SDL_RenderCopyEx(SDL_Renderer* r, SDL_Texture* t, const SD
 {
     s_copiesEx++;
     CountCopy(r, t, src, dst);
+    if (Gpu3DS_Active())
+    {
+        return Gpu3DS_RenderCopy(r, t, src, dst, angle, center, (int)flip);
+    }
     return __real_SDL_RenderCopyEx(r, t, src, dst, angle, center, flip);
 }
 
@@ -72,6 +81,10 @@ int Platform3DS_FormatDrawStats(char* buf, int n, int frames)
     }
     int len = snprintf(buf, n, "copies %u ex %u scaled~ %u px %uk",
         s_copies / frames, s_copiesEx / frames, s_scaled / frames, (unsigned)(s_pixels / frames / 1000.0));
+    if (Gpu3DS_Active() && len > 0 && len < n)
+    {
+        len += snprintf(buf + len, n - len, " | gpuwait %.1f", Gpu3DS_TakeWaitMs() / frames);
+    }
     s_copies = s_copiesEx = s_scaled = 0;
     s_pixels = 0.0;
     return len;
@@ -140,6 +153,16 @@ static void RunCase(SDL_Renderer* r, const char* label, SDL_Texture* t, int dw, 
 
 void Platform3DS_BlitBenchmark(SDL_Renderer* r, SDL_Window* w)
 {
+    if (Gpu3DS_Active())
+    {
+        SDL_RendererInfo gpuInfo;
+        if (SDL_GetRendererInfo(r, &gpuInfo) == 0)
+        {
+            fprintf(stderr, "[gpu] renderer '%s', max texture %dx%d (software blit benchmark skipped)\n",
+                gpuInfo.name, gpuInfo.max_texture_width, gpuInfo.max_texture_height);
+        }
+        return;
+    }
     SDL_RendererInfo info;
     if (SDL_GetRendererInfo(r, &info) == 0)
     {

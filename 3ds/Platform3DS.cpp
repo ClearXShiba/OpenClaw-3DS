@@ -1,6 +1,7 @@
 #ifdef __3DS__
 
 #include "Platform3DS.h"
+#include "Gpu3DS.h"
 
 #include <3ds.h>
 #include <SDL2/SDL.h>
@@ -77,6 +78,7 @@ void Platform3DS_LogMemory(const char* tag)
         tag, mi.uordblks / 1024, mi.arena / 1024,
         (unsigned)(osGetMemRegionFree(MEMREGION_APPLICATION) / 1024),
         (unsigned)(linearSpaceFree() / 1024));
+    Gpu3DS_LogStats(tag);
 }
 
 // ---------------------------------------------------------------------------
